@@ -9,11 +9,16 @@ services:
       - GENERIC_TIMEZONE=Europe/Madrid
       - TZ=Europe/Madrid
       - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      # Lets Code nodes `require('fs')` to read config/config.json and
+      # persist state/run-log files under /data. Everything else in the
+      # workflows stays in n8n's normal expression sandbox.
+      - NODE_FUNCTION_ALLOW_BUILTIN=fs
     env_file:
       - .env
     volumes:
       - n8n_data:/home/node/.n8n
       - ./config:/config:ro
+      - ./data:/data
 
 volumes:
   n8n_data:

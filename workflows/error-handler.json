@@ -1,0 +1,32 @@
+{
+  "name": "Music News Digest - Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Reads config.json fresh (this workflow has no shared state with the\n// main digest run) just to get the Telegram chat ID, then sends an alert\n// via the same raw-fetch pattern the main workflow uses.\nconst fs = require('fs');\nconst config = JSON.parse(fs.readFileSync('/config/config.json', 'utf8'));\n\nconst err = $json;\nconst workflowName = err.workflow?.name || 'unknown workflow';\nconst failedNode = err.execution?.lastNodeExecuted || 'unknown node';\nconst message = err.execution?.error?.message || JSON.stringify(err).slice(0, 300);\n\nconst text = [\n  `⚠️ ${workflowName} failed`,\n  `Node: ${failedNode}`,\n  `Error: ${message}`,\n  `Time: ${new Date().toISOString()}`\n].join('\\n');\n\nconst token = $env.TELEGRAM_BOT_TOKEN;\nconst response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {\n  method: 'POST',\n  headers: { 'content-type': 'application/json' },\n  body: JSON.stringify({ chat_id: config.telegram.chat_id, text })\n});\n\nif (!response.ok) {\n  const bodyText = await response.text();\n  throw new Error(`Telegram API error ${response.status}: ${bodyText.slice(0, 300)}`);\n}\n\nreturn [{ json: { alert_sent: true, workflow: workflowName, node: failedNode } }];\n"
+      },
+      "id": "send-error-alert",
+      "name": "Send Error Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 0]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [[{ "node": "Send Error Alert", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

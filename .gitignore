@@ -163,3 +163,8 @@ config/config.json
 /logs/
 *.log.json
 
+# Pipeline state (seen-item dedupe cache + run log) written by the digest
+# workflow at runtime. Keep the directory, ignore its generated contents.
+/data/*
+!/data/.gitkeep
+

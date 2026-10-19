@@ -44,9 +44,10 @@ Send Telegram digest ──▶ Append run log (counts, tokens, cost, errors)
     which sends a Telegram alert)
 ```
 
-This repo is a scaffold today (Phase 1). The actual n8n workflow JSON
-(Phase 2) and an evaluation script for the scoring rubric (Phase 3) are not
-built yet — see the project's phase plan for what's coming.
+Phase 1 (project scaffold) and Phase 2 (the n8n workflows) are built. Scoring
+uses the Anthropic API — model `claude-haiku-5-5` by default, set in
+`config/config.json` under `llm.model`. An evaluation script for the scoring
+rubric (Phase 3) is not built yet.
 
 ## Folder structure
 
@@ -54,8 +55,9 @@ built yet — see the project's phase plan for what's coming.
 |---|---|
 | `docker-compose.yml` | Runs n8n locally in Docker with a persistent named volume. |
 | `.env.example` | Template listing every secret/env var n8n needs. Copy to `.env`. |
-| `config/config.example.json` | Template for the pipeline config: RSS sources, scoring rubric, threshold, Telegram chat ID. Copy to `config/config.json`. |
-| `workflows/` | Exported n8n workflow JSON to import into the n8n editor (added in Phase 2). |
+| `config/config.example.json` | Template for the pipeline config: RSS sources, scoring rubric, LLM model, threshold, Telegram chat ID. Copy to `config/config.json`. |
+| `workflows/` | The two n8n workflows (`digest.json`, `error-handler.json`) — import these into the n8n editor. See `workflows/README.md`. |
+| `data/` | Runtime state written by the digest workflow: the seen-item dedupe cache and the run log. Empty until the workflow runs once. |
 | `scripts/` | Helper scripts — currently `check-secrets.sh`, a pre-commit secret scan. |
 
 ## Setup
@@ -64,8 +66,10 @@ built yet — see the project's phase plan for what's coming.
 
 - [Docker](https://www.docker.com/) and Docker Compose installed.
 - A Telegram account.
-- An API key for whichever LLM provider you plan to use for scoring (a cheap
-  small model is enough — this only scores a headline + short snippet).
+- An [Anthropic API key](https://console.anthropic.com/) for scoring. The
+  default model (`claude-haiku-5-5`, set in `config/config.json`) is cheap —
+  it only scores a headline + short snippet per item, roughly $0.10/$0.50
+  per million input/output tokens.
 
 ### 2. Create a Telegram bot and get your chat ID
 
@@ -88,7 +92,8 @@ cp .env.example .env
 
 Edit `.env` and fill in:
 - `N8N_ENCRYPTION_KEY` — generate with `openssl rand -hex 32`
-- `LLM_API_KEY` — your LLM provider's API key
+- `LLM_API_KEY` — your Anthropic API key (used to call `claude-haiku-5-5` by
+  default — see `config/config.json`'s `llm.model` to change it)
 - `TELEGRAM_BOT_TOKEN` — from step 2
 
 **Never commit `.env`.** It's already excluded in `.gitignore`.
@@ -123,13 +128,17 @@ docker compose ps
 
 You should see the container with status `Up`.
 
-### 6. Open the n8n editor
+### 6. Open n8n and import the workflows
 
 Go to **http://localhost:5678** in your browser and finish the one-time
 n8n account setup (local only — this account isn't sent anywhere).
 
-*(Phase 2 will cover importing the actual workflow and wiring up credentials
-for the LLM and Telegram nodes.)*
+Then import both workflows and link the error handler — full steps in
+[`workflows/README.md`](workflows/README.md). Short version: import
+`workflows/error-handler.json`, import `workflows/digest.json`, set
+`digest.json`'s workflow setting **Error Workflow** to point at the error
+handler, run `digest.json` once manually to confirm it works end to end,
+then activate it.
 
 ### 7. Before every commit
 
