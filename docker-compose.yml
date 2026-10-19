@@ -13,6 +13,10 @@ services:
       # persist state/run-log files under /data. Everything else in the
       # workflows stays in n8n's normal expression sandbox.
       - NODE_FUNCTION_ALLOW_BUILTIN=fs
+      # Lets Code nodes read $env (LLM_API_KEY, TELEGRAM_BOT_TOKEN) — n8n
+      # blocks this by default. See README "Security notes" for why that's
+      # an acceptable tradeoff here but not for a publicly exposed instance.
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     env_file:
       - .env
     volumes:

@@ -150,6 +150,19 @@ This scans the files git would actually commit for things that look like API
 keys or tokens. It's a heuristic, not a guarantee — review your `git diff`
 too.
 
+## Security notes
+
+- `docker-compose.yml` sets `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, which lets
+  the Code nodes in `workflows/digest.json` and `workflows/error-handler.json`
+  read `LLM_API_KEY` and `TELEGRAM_BOT_TOKEN` via `$env` instead of going
+  through n8n's credential store. That's an acceptable tradeoff for this
+  project's intended use — a single user, running n8n only on localhost, with
+  secrets that already live in `.env` and nowhere else. **If you ever expose
+  this n8n instance beyond localhost** (a tunnel, a VPS, a shared network),
+  don't rely on this setting — switch those two secrets to n8n credentials
+  instead, which keep them out of reach of any workflow code that didn't
+  explicitly request them.
+
 ## Limitations
 
 - **Runs on a local machine.** If your laptop is off, asleep, or offline when
