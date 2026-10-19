@@ -1,0 +1,47 @@
+{
+  "sources": [
+    {
+      "name": "Music Ally",
+      "url": "https://musically.com/feed/",
+      "category": "industry"
+    },
+    {
+      "name": "Hypebot",
+      "url": "https://www.hypebot.com/feed",
+      "category": "industry"
+    },
+    {
+      "name": "Water & Music",
+      "url": "https://www.waterandmusic.com/feed",
+      "category": "tech"
+    }
+  ],
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "temperature": 0.2
+  },
+  "rubric": {
+    "instructions": "Score this headline and snippet from 0 (irrelevant) to 10 (must-read) for a music-tech industry professional who tracks: AI tools for music creation/distribution/rights, streaming platform economics and policy, major-label and artist business deals, and emerging music tech startups. Penalize celebrity gossip, tour/show announcements with no business angle, and minor rehashes of stories already widely covered. Return strict JSON: {\"score\": <0-10 integer>, \"summary\": \"<one-line summary>\", \"why_it_matters\": \"<one-line reason>\"}.",
+    "criteria": [
+      { "weight": "high", "signal": "AI in music: generation, mastering, rights management, detection" },
+      { "weight": "high", "signal": "Streaming economics: royalties, DSP policy changes, platform strategy" },
+      { "weight": "medium", "signal": "M&A, funding rounds, or major partnerships in music tech" },
+      { "weight": "medium", "signal": "Shifts in how artists release, market, or monetize music" },
+      { "weight": "low", "signal": "General trend pieces without a clear actionable insight" }
+    ],
+    "exclude": [
+      "Celebrity gossip with no business angle",
+      "Local concert or tour date announcements",
+      "Opinion pieces unrelated to technology or business strategy"
+    ]
+  },
+  "threshold": 6,
+  "telegram": {
+    "chat_id": "YOUR_TELEGRAM_CHAT_ID"
+  },
+  "run": {
+    "max_items_per_source": 20,
+    "lookback_hours_on_first_run": 24
+  }
+}

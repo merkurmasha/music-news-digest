@@ -147,3 +147,19 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# --- music-news-digest project-specific ---
+
+# Real pipeline config (sources/rubric/threshold/telegram target) — personal,
+# not secret, but shouldn't be committed. Edit config/config.example.json instead
+# and copy it to config/config.json locally.
+config/config.json
+
+# n8n data is kept in a named Docker volume (not a bind mount), so there is
+# no local n8n data directory to ignore here. If that ever changes, add it.
+
+# Local run logs, if the pipeline is pointed at a local log file instead of
+# (or in addition to) a log table.
+/logs/
+*.log.json
+
