@@ -65,10 +65,10 @@
     "chat_id": "YOUR_TELEGRAM_CHAT_ID"
   },
   "digest": {
-    "intro_template": "Music industry news from {from} to {to}: {count} items from {sources} sources."
-  },
-  "run": {
-    "lookback_hours_on_first_run": 24
+    "intro_template": "Music industry news from {from} to {to}: {count} items from {sources} sources.",
+    "first_run_lookback_days": 7,
+    "max_items_per_source": 8,
+    "max_items": 30
   },
   "eval": {
     "export_candidates_csv": false,

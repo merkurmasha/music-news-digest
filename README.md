@@ -226,6 +226,13 @@ that string. `threshold` is the minimum score (0–10, clamped in code even
 though the model isn't hard-constrained to that range) an item needs to make
 the digest.
 
+`digest.first_run_lookback_days` (default 7) is how far back a **normal**
+(scheduled) run looks when `data/state.json` has no `last_run_at` yet — i.e.
+the very first run, or any run right after deleting that file. Every run
+after that uses the previous run's time instead, regardless of this
+setting. It has no effect on backfill mode, which uses its own
+`eval.backfill_days` window.
+
 ### Digest intro line
 
 `digest.intro_template` (default: `"Music industry news from {from} to {to}:
@@ -253,6 +260,32 @@ message — `"Music industry news from {from} to {to}: nothing new passed the
 threshold."` (same date logic, not configurable separately) — rather than
 staying silent. Backfill runs never send to Telegram at all, so none of this
 applies there.
+
+### Digest size, grouping, and multi-message splitting
+
+Two caps shape what actually goes into the digest, applied after scoring,
+highest score first — not to be confused with each source's own
+`max_items` (how many *recent* items that source contributes before
+scoring; see the `sources` array above):
+
+- `digest.max_items_per_source` (default 8) — at most this many items from
+  any one source make the digest, even if more scored above the threshold.
+- `digest.max_items` (default 30) — total cap across all sources, applied
+  after the per-source cap.
+
+Both caps log how many items they removed (`dropped_by_source_cap`,
+`dropped_by_max_cap` in `data/run-log.ndjson`) — `0` means that cap didn't
+need to remove anything that run.
+
+The Telegram message itself groups the surviving items by source name
+(each source's items sorted by score, highest first; sections ordered by
+each source's own top score, so the single best story overall leads the
+digest) and splits across multiple Telegram messages at item boundaries —
+never cutting an item's text in half — once the running length would
+exceed Telegram's 4096-character limit. Only the first message carries the
+intro line and the "Music News Digest — N item(s)" header; if a source's
+items span a message boundary, its name is repeated as a heading in the
+continuation message so that message still reads on its own.
 
 ### Candidate export for labeling
 
