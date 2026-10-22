@@ -1,28 +1,19 @@
 {
   "sources": [
     {
-      "id": "music-ally",
-      "name": "Music Ally",
+      "id": "example-rss-1",
+      "name": "Example RSS Source 1 (Hacker News)",
       "type": "rss",
-      "url": "https://musically.com/feed/",
+      "url": "https://news.ycombinator.com/rss",
       "language": "en",
       "enabled": true,
       "max_items": 20
     },
     {
-      "id": "hypebot",
-      "name": "Hypebot",
+      "id": "example-rss-2",
+      "name": "Example RSS Source 2 (GitHub Blog)",
       "type": "rss",
-      "url": "https://www.hypebot.com/feed",
-      "language": "en",
-      "enabled": true,
-      "max_items": 20
-    },
-    {
-      "id": "water-and-music",
-      "name": "Water & Music",
-      "type": "rss",
-      "url": "https://www.waterandmusic.com/feed",
+      "url": "https://github.blog/feed/",
       "language": "en",
       "enabled": true,
       "max_items": 20
@@ -52,20 +43,19 @@
     }
   ],
   "llm": {
-    "provider": "anthropic",
     "model": "claude-haiku-5-5",
     "cost_per_mtok_input": 0.10,
     "cost_per_mtok_output": 0.50
   },
   "rubric": {
-    "instructions": "Score this headline and snippet from 0 (irrelevant) to 10 (must-read) for a music-tech industry professional who tracks: AI tools for music creation/distribution/rights, streaming platform economics and policy, major-label and artist business deals, and emerging music tech startups. Penalize celebrity gossip, tour/show announcements with no business angle, and minor rehashes of stories already widely covered."
+    "instructions": "REPLACE THIS with your own scoring rubric — it is sent to the model verbatim alongside each item's title and text excerpt. Write it as plain instructions, not a structured format. Cover, in order: (1) Who the reader is — a specific role with real stakes (e.g. 'a product manager at a company selling X to Y'), not a vague interest area; the more specific, the more consistent the scoring. (2) What scores 8-10 — concrete, high-stakes events specific to that reader's field (launches, deals, funding, rulings, policy changes, named competitors). (3) What scores 5-7 — useful context that doesn't demand immediate action (market reports, executive moves, general trend pieces). (4) What scores 0-4 and should be excluded outright — name the specific noise your sources produce (e.g. opinion with no concrete event, promotions, unrelated topics). Also tell the model to write its one-line summary and one-line why-it-matters explanation in the same language as the item, and to explain why the item matters specifically to the reader you described in (1). See the README's 'Adjusting it for your own field' section for a full worked example and a fill-in-the-blanks skeleton."
   },
   "threshold": 6,
   "telegram": {
     "chat_id": "YOUR_TELEGRAM_CHAT_ID"
   },
   "digest": {
-    "intro_template": "Music industry news from {from} to {to}: {count} items from {sources} sources.",
+    "intro_template": "News digest from {from} to {to}: {count} items from {sources} sources.",
     "first_run_lookback_days": 7,
     "max_items_per_source": 8,
     "max_items": 30
