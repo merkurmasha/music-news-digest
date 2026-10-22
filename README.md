@@ -226,6 +226,34 @@ that string. `threshold` is the minimum score (0–10, clamped in code even
 though the model isn't hard-constrained to that range) an item needs to make
 the digest.
 
+### Digest intro line
+
+`digest.intro_template` (default: `"Music industry news from {from} to {to}:
+{count} items from {sources} sources."`) is sent at the top of every
+scheduled-run Telegram message, above the existing "Music News Digest — N
+item(s)" header. Placeholders:
+
+| Placeholder | Meaning |
+|---|---|
+| `{from}` | Start of the window actually used this run — the last successful run's time, or the first-run lookback start if there's no state yet. Formatted `"22 Oct"` (no year), in Europe/Madrid time. |
+| `{to}` | The run time, formatted `"22 Oct 2026"` (with year), in Europe/Madrid time. |
+| `{count}` | Number of items in this digest. |
+| `{sources}` | Number of distinct sources contributing at least one of those items. |
+
+If `{from}` and `{to}` fall on the same Madrid calendar day, a template
+containing the literal phrase `from {from} to {to}` has that phrase replaced
+with `for {to}` (e.g. `"...for 22 Oct 2026: ..."` instead of a one-day-wide
+range) — this only triggers for that exact phrase; a custom template without
+it just gets both placeholders filled in with the same date. The intro
+counts toward Telegram's 4096-character limit along with the rest of the
+message.
+
+When nothing passes the threshold, the workflow still sends one short
+message — `"Music industry news from {from} to {to}: nothing new passed the
+threshold."` (same date logic, not configurable separately) — rather than
+staying silent. Backfill runs never send to Telegram at all, so none of this
+applies there.
+
 ### Candidate export for labeling
 
 Set `eval.export_candidates_csv: true` to append every scored candidate

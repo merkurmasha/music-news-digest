@@ -64,6 +64,9 @@
   "telegram": {
     "chat_id": "YOUR_TELEGRAM_CHAT_ID"
   },
+  "digest": {
+    "intro_template": "Music industry news from {from} to {to}: {count} items from {sources} sources."
+  },
   "run": {
     "lookback_hours_on_first_run": 24
   },
