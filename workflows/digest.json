@@ -6,8 +6,10 @@
         "rule": {
           "interval": [
             {
-              "field": "hours",
-              "hoursInterval": 6
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 11,
+              "triggerAtMinute": 0
             }
           ]
         }

@@ -53,8 +53,9 @@ This only works because `docker-compose.yml` sets
    breakdown (`sources: [...]`) so you can see each feed/channel's fetched
    count or error.
 7. Toggle `digest.json` **Active** once a manual run looks right. It then
-   runs on the Schedule Trigger's interval (every 6 hours by default — edit
-   that node to change it).
+   runs on the Schedule Trigger's interval — once a day at 11:00 by default
+   (n8n's instance timezone, set via `GENERIC_TIMEZONE` in
+   `docker-compose.yml`, is Europe/Madrid) — edit that node to change it.
 
 ## Known caveats
 
