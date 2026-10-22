@@ -235,6 +235,39 @@ fill in by hand. Useful for building an evaluation set to check the rubric
 against later. The file is gitignored and grows across runs; delete it if
 you want to start over.
 
+### Running a backfill (bulk-scoring history for labeling)
+
+A normal scheduled run only looks at what's new since the last run. To
+instead pull and score history for building an evaluation set, open
+`digest.json` in the n8n editor and run it from the **Manual Backfill
+Trigger** node specifically (not the Schedule Trigger) — click into that
+node and use n8n's "Execute step"/"Test workflow from this node" option
+(the exact label depends on your n8n version; if the editor only offers one
+"Execute workflow" button, use the dropdown next to it to pick the Manual
+Backfill Trigger as the start node).
+
+A backfill run:
+
+- Uses a fixed lookback of `eval.backfill_days` (default 30) instead of
+  "since the last successful run," and **ignores `seen_ids`** — items you've
+  already been sent will show up again, by design, since the point is
+  re-scoring history, not catching up on new items.
+- **Never sends anything to Telegram and never writes `data/state.json`** —
+  it has zero effect on the next scheduled run.
+- Paginates each Telegram channel backward (`?before=`) to cover the
+  lookback window, capped at 5 pages per channel. If 5 pages weren't enough
+  to reach the window boundary, that channel's run-log entry has
+  `cap_hit: true` — its history for this backfill is incomplete.
+- **Always** exports to `data/candidates.csv` (ignoring
+  `eval.export_candidates_csv`) and **overwrites** the file at the start of
+  the run, rather than appending.
+- Is capped at 300 candidates total (the most recent 300 within the window,
+  if more than that qualify).
+- Appends a `mode: "backfill"` entry to `data/run-log.ndjson` with a
+  per-source breakdown (`fetched`, `within_window`, `scored`,
+  `score_distribution`, plus `pages_fetched`/`cap_hit` for Telegram sources)
+  alongside the usual token counts and estimated cost.
+
 ### Limitations specific to Telegram preview scraping
 
 - It's HTML scraping of a public preview page, not an API — Telegram can

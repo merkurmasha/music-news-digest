@@ -68,6 +68,7 @@
     "lookback_hours_on_first_run": 24
   },
   "eval": {
-    "export_candidates_csv": false
+    "export_candidates_csv": false,
+    "backfill_days": 30
   }
 }
