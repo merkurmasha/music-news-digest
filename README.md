@@ -1,24 +1,33 @@
 # music-news-digest
 
 A config-driven news digest agent for the music industry/music tech space. It runs
-on a schedule in self-hosted [n8n](https://n8n.io/), reads RSS feeds you configure,
-scores each item for relevance with a small LLM against a rubric you write, and
-sends the items that pass a threshold to your Telegram chat. Built as a portfolio
-case study.
+on a schedule in self-hosted [n8n](https://n8n.io/), reads sources you configure
+(RSS feeds and public Telegram channels today), scores each item for relevance
+with a small LLM against a rubric you write, and sends the items that pass a
+threshold to your Telegram chat. Built as a portfolio case study.
 
 ## What it does
 
-1. Fetches items from the RSS feeds listed in `config/config.json`.
-2. Deduplicates items and skips ones already sent in a previous run.
-3. Scores each item (headline + short snippet only) 0–10 against the rubric in
+1. Fetches items from every enabled source in `config/config.json` — RSS feeds
+   and public Telegram channel previews. A failure on one source (feed down,
+   channel page changed shape) is logged and skipped; it never stops the run
+   for the other sources.
+2. Deduplicates items by URL/permalink and skips ones already sent in a
+   previous run.
+3. Scores each item (title + short text excerpt) 0–10 against the rubric in
    the config, using a small/cheap LLM. The model returns structured JSON: a
-   score, a one-line summary, and a one-line "why it matters".
+   score, a one-line summary, and a one-line "why it matters" — both written
+   in the same language as the item.
 4. Keeps items at or above the configured threshold.
 5. Sends the kept items as a digest message to your Telegram chat.
-6. Logs every run (timestamp, items fetched, items kept, tokens, cost, errors)
-   and tracks the last successful run, so a day the pipeline didn't run gets
-   caught up on the next run.
-7. A separate error workflow sends you a Telegram alert if a run fails.
+6. Logs every run (timestamp, items fetched per source, items scored/kept,
+   tokens, cost, errors) and tracks the last successful run, so a day the
+   pipeline didn't run gets caught up on the next run.
+7. Optionally exports every scored candidate (not just the kept ones) to
+   `data/candidates.csv` with an empty `label` column, for building a hand-
+   labeled evaluation set later.
+8. A separate error workflow sends you a Telegram alert if a run fails
+   outright (not a single source failing — see point 1).
 
 ## Architecture overview
 
@@ -29,19 +38,28 @@ Schedule trigger
 Read config (sources, rubric, threshold, telegram target)
       │
       ▼
-Fetch RSS feeds ──▶ Deduplicate (skip already-sent items)
+Fetch every enabled source, per-source try/catch:
+  - rss:      HTTP GET the feed, parse items
+  - telegram: HTTP GET https://t.me/s/<channel> preview, parse posts
+              (throttled to once/24h per channel)
+  - email:    not implemented — logged as a per-source error if enabled
+      │
+      ▼
+Dedupe by URL/permalink ──▶ Filter by recency (since last successful run)
       │
       ▼
 Score each item with LLM (rubric → {score, summary, why_it_matters})
-      │
+      │         └──▶ (optional) append every scored candidate to
+      │               data/candidates.csv for hand-labeling
       ▼
 Filter: keep score >= threshold
       │
       ▼
-Send Telegram digest ──▶ Append run log (counts, tokens, cost, errors)
+Send Telegram digest ──▶ Append run log (per-source counts, tokens, cost, errors)
 
-   (any node failing above triggers the separate error workflow,
-    which sends a Telegram alert)
+   (a fatal failure — bad LLM/Telegram credentials, Anthropic API down —
+    triggers the separate error workflow, which sends a Telegram alert;
+    a single source failing does not)
 ```
 
 Phase 1 (project scaffold) and Phase 2 (the n8n workflows) are built. Scoring
@@ -55,9 +73,9 @@ rubric (Phase 3) is not built yet.
 |---|---|
 | `docker-compose.yml` | Runs n8n locally in Docker with a persistent named volume. |
 | `.env.example` | Template listing every secret/env var n8n needs. Copy to `.env`. |
-| `config/config.example.json` | Template for the pipeline config: RSS sources, scoring rubric, LLM model, threshold, Telegram chat ID. Copy to `config/config.json`. |
+| `config/config.example.json` | Template for the pipeline config: sources (rss/telegram/email), scoring rubric, LLM model, threshold, Telegram chat ID. Copy to `config/config.json`. |
 | `workflows/` | The two n8n workflows (`digest.json`, `error-handler.json`) — import these into the n8n editor. See `workflows/README.md`. |
-| `data/` | Runtime state written by the digest workflow: the seen-item dedupe cache and the run log. Empty until the workflow runs once. |
+| `data/` | Runtime state written by the digest workflow: the seen-item dedupe cache, per-channel Telegram fetch times, the run log, and (if enabled) `candidates.csv`. Empty until the workflow runs once. |
 | `scripts/` | Helper scripts — currently `check-secrets.sh`, a pre-commit secret scan. |
 
 ## Setup
@@ -105,9 +123,11 @@ cp config/config.example.json config/config.json
 ```
 
 Edit `config/config.json`:
-- `sources` — the RSS feeds you want to track (3 samples are included).
-- `rubric` — adjust the scoring instructions/criteria to match what you
-  personally consider relevant.
+- `sources` — the feeds/channels you want to track (a few public RSS samples
+  are included). See "Adjusting it for your own sources" below for the full
+  schema.
+- `rubric.instructions` — the scoring prompt, in full. Rewrite it to match
+  what you personally consider relevant.
 - `threshold` — the minimum score (0–10) an item needs to be sent.
 - `telegram.chat_id` — the chat ID from step 2.
 
@@ -162,6 +182,75 @@ too.
   don't rely on this setting — switch those two secrets to n8n credentials
   instead, which keep them out of reach of any workflow code that didn't
   explicitly request them.
+
+## Adjusting it for your own sources
+
+Nothing is hardcoded in the workflow — every source, the rubric, the
+threshold, and the Telegram target all come from `config/config.json`.
+
+### The `sources` array
+
+Every entry shares these fields:
+
+| Field | Meaning |
+|---|---|
+| `id` | Stable short identifier (kebab-case). Used in dedupe keys, the run log, `telegram_last_fetch` state, and `data/candidates.csv`'s `source` column. Don't rename it once you've run the pipeline — it's how state ties back to a source. |
+| `name` | Human-readable name, shown in the run log and the digest message. |
+| `type` | `"rss"`, `"telegram"`, or `"email"` — picks which fetch logic runs. |
+| `language` | Metadata only (not currently read by the workflow — the model infers language from the item text itself when writing the summary). Useful for your own reference. |
+| `enabled` | Set `false` to keep a source configured but skip it. |
+| `max_items` | Cap on how many of the source's most recent items are considered per run. |
+
+Type-specific fields:
+
+- **`rss`**: `url` — the feed URL. Fetched and parsed with a small built-in
+  regex parser (title/link/guid/pubDate/description/content:encoded) — no
+  external library. Works with standard RSS 2.0 feeds; if a feed uses a very
+  different shape (pure Atom, unusual namespaces), it may need extending.
+- **`telegram`**: `channel` — the bare handle, no `@` and no `t.me/` prefix
+  (e.g. `"gensound"` for `@gensound`). Reads the public
+  `https://t.me/s/<channel>` preview page — no login, no API credentials.
+  See the limitation below before relying on this for anything serious.
+- **`email`**: `mailbox` — `{host, port, username, folder}`. **Schema only.**
+  The workflow does not fetch email yet; an enabled `email` source is
+  skipped with a per-source error (`"email source type not implemented
+  yet"`) logged on every run instead of fetching anything.
+
+### Rubric and threshold
+
+`rubric.instructions` is the entire scoring prompt, sent to the model
+verbatim alongside each item's title and text excerpt. There's no separate
+`criteria`/`exclude` structure — write the full scoring logic (what counts as
+high/low relevance, what to exclude, any language instructions) directly into
+that string. `threshold` is the minimum score (0–10, clamped in code even
+though the model isn't hard-constrained to that range) an item needs to make
+the digest.
+
+### Candidate export for labeling
+
+Set `eval.export_candidates_csv: true` to append every scored candidate
+(kept or not) to `data/candidates.csv` — columns `id, source, date, title,
+snippet, url, model_score, label`, with `label` always left empty for you to
+fill in by hand. Useful for building an evaluation set to check the rubric
+against later. The file is gitignored and grows across runs; delete it if
+you want to start over.
+
+### Limitations specific to Telegram preview scraping
+
+- It's HTML scraping of a public preview page, not an API — Telegram can
+  change that page's markup at any time and silently break parsing (you'd
+  see `fetched: 0` with no error for that channel, or an empty text match
+  skipping every post as "media-only").
+- Each channel is fetched at most once every 24 hours, tracked per-channel
+  in `data/state.json`'s `telegram_last_fetch` — this is a deliberate light-
+  touch limit on a public, unauthenticated page, not something to tune down.
+- The boilerplate/hashtag stripping (`TG_BOILERPLATE_MARKERS` in
+  `workflows/digest.json`) is a heuristic denylist built from the specific
+  channels this project was configured against — it is not exhaustive and
+  may need new entries for channels with different sign-off text.
+- Only the public preview is supported — no private channels, no login, no
+  channel history beyond what that page renders (roughly the most recent
+  ~20 posts).
 
 ## Limitations
 
