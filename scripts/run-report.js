@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Summarizes data/run-log.ndjson for the scheduled (non-backfill) digest
-// runs: date coverage, errors, item counts, token/cost totals, and a
-// per-source fetched breakdown. Run with: node scripts/run-report.js
+// Summarizes data/run-log.ndjson for the non-backfill digest runs: date
+// coverage/reliability (computed only from trigger: "scheduled" entries —
+// a manual test run is listed separately and doesn't count toward or
+// against it), errors, item counts, token/cost totals, and a per-source
+// fetched/scored/kept/sent breakdown over the whole period. Run with:
+// node scripts/run-report.js
 //
 // No dependencies beyond Node's standard library.
 
@@ -80,21 +83,39 @@ function main() {
     return;
   }
 
-  // --- Date coverage ---
-  const dayKeys = runs.map((r) => dayKey(r.timestamp)).sort();
-  const firstDay = dayKeys[0];
-  const lastDay = dayKeys[dayKeys.length - 1];
-  const daysWithRun = new Set(dayKeys);
+  // "trigger" was added alongside the per-source scored/kept/sent fields —
+  // entries from before that count as manual, per the brief, since they
+  // can't be told apart from a real unattended scheduled firing.
+  function triggerOf(r) {
+    return r.trigger || 'manual';
+  }
+  const scheduledRuns = runs.filter((r) => triggerOf(r) === 'scheduled');
+  const manualRuns = runs.filter((r) => triggerOf(r) !== 'scheduled');
 
-  const rangeDays = Math.round((dayKeyToDate(lastDay) - dayKeyToDate(firstDay)) / 86400000) + 1;
+  // --- Date coverage / reliability — scheduled-trigger runs only. A
+  // manual test run shouldn't count toward (or against) whether the daily
+  // cron is actually firing. ---
+  let firstDay = null;
+  let lastDay = null;
+  let rangeDays = 0;
+  let daysWithRun = new Set();
+  let missingDays = [];
 
-  const missingDays = [];
-  let cursor = dayKeyToDate(firstDay);
-  const end = dayKeyToDate(lastDay);
-  while (cursor <= end) {
-    const key = cursor.toISOString().slice(0, 10);
-    if (!daysWithRun.has(key)) missingDays.push(key);
-    cursor = addDays(cursor, 1);
+  if (scheduledRuns.length) {
+    const dayKeys = scheduledRuns.map((r) => dayKey(r.timestamp)).sort();
+    firstDay = dayKeys[0];
+    lastDay = dayKeys[dayKeys.length - 1];
+    daysWithRun = new Set(dayKeys);
+
+    rangeDays = Math.round((dayKeyToDate(lastDay) - dayKeyToDate(firstDay)) / 86400000) + 1;
+
+    let cursor = dayKeyToDate(firstDay);
+    const end = dayKeyToDate(lastDay);
+    while (cursor <= end) {
+      const key = cursor.toISOString().slice(0, 10);
+      if (!daysWithRun.has(key)) missingDays.push(key);
+      cursor = addDays(cursor, 1);
+    }
   }
 
   // --- Errors ---
@@ -131,38 +152,57 @@ function main() {
   }
   const avgCostPerRun = totalCost / runs.length;
 
-  // --- Per-source fetched totals ---
-  // Only "fetched" (and errors, above) are recorded per source for a
-  // scheduled run — scored/sent are only tracked in aggregate per run, not
-  // broken out per source, so they can't be reported here without
-  // changing what the workflow logs.
-  const perSourceFetched = {}; // name -> total fetched across all runs
+  // --- Per-source totals, over the whole period (scheduled + manual) ---
+  // scored/kept_after_threshold/sent only exist on entries written after
+  // this per-source breakdown was added — older entries simply don't
+  // increment them (defaulting to 0 below), so they still contribute
+  // their fetched count without fabricating the rest.
+  const perSource = {}; // name -> { fetched, scored, kept_after_threshold, sent }
   const sourceNamesSeen = new Set();
   for (const r of runs) {
     for (const s of r.sources || []) {
       sourceNamesSeen.add(s.name);
-      perSourceFetched[s.name] = (perSourceFetched[s.name] || 0) + (s.fetched || 0);
+      const agg = (perSource[s.name] = perSource[s.name] || { fetched: 0, scored: 0, kept_after_threshold: 0, sent: 0 });
+      agg.fetched += s.fetched || 0;
+      agg.scored += s.scored || 0;
+      agg.kept_after_threshold += s.kept_after_threshold || 0;
+      agg.sent += s.sent || 0;
     }
   }
   const entriesMissingSources = runs.filter((r) => !r.sources).length;
+  const entriesMissingPerSourceCounts = runs.filter((r) => (r.sources || []).length && r.sources.every((s) => s.scored === undefined)).length;
 
   // --- Print ---
   console.log('=== Music News Digest — run report ===');
   console.log(`(scheduled runs only — ${entries.length - runs.length} backfill entr${entries.length - runs.length === 1 ? 'y' : 'ies'} ignored)\n`);
 
-  console.log('-- Date coverage (Europe/Madrid calendar days) --');
-  console.log(`First run: ${firstDay}`);
-  console.log(`Last run:  ${lastDay}`);
-  console.log(`Calendar days in range: ${rangeDays}`);
-  console.log(`Days with a completed run: ${daysWithRun.size}`);
-  if (missingDays.length) {
-    console.log(`Days with no run (${missingDays.length}): ${missingDays.join(', ')}`);
+  console.log('-- Reliability (Europe/Madrid calendar days, scheduled-trigger runs only) --');
+  if (scheduledRuns.length) {
+    console.log(`First scheduled run: ${firstDay}`);
+    console.log(`Last scheduled run:  ${lastDay}`);
+    console.log(`Calendar days in range: ${rangeDays}`);
+    console.log(`Days with a completed scheduled run: ${daysWithRun.size}`);
+    if (missingDays.length) {
+      console.log(`Days with no scheduled run (${missingDays.length}): ${missingDays.join(', ')}`);
+    } else {
+      console.log('Days with no scheduled run: none');
+    }
   } else {
-    console.log('Days with no run: none');
+    console.log('No scheduled-trigger runs yet — nothing to compute reliability from.');
   }
 
-  console.log('\n-- Runs and errors --');
-  console.log(`Total runs: ${runs.length}`);
+  console.log(`\n-- Manual runs (${manualRuns.length}) --`);
+  if (manualRuns.length) {
+    for (const r of manualRuns) {
+      const sent = r.sent !== undefined ? r.sent : (r.kept || 0);
+      console.log(`  ${r.timestamp}: fetched ${r.fetched || 0}, scored ${r.scored || 0}, sent ${sent}`);
+    }
+  } else {
+    console.log('  None.');
+  }
+
+  console.log('\n-- Runs and errors (scheduled + manual) --');
+  console.log(`Total runs: ${runs.length} (${scheduledRuns.length} scheduled, ${manualRuns.length} manual)`);
   console.log(`Runs with at least one error: ${runsWithError}`);
   const sourceErrorNames = Object.keys(sourceErrorCounts);
   if (sourceErrorNames.length) {
@@ -186,21 +226,20 @@ function main() {
   console.log(`Total estimated cost: ${formatMoney(totalCost)}`);
   console.log(`Average cost per run: ${formatMoney(avgCostPerRun)}`);
 
-  console.log('\n-- Per-source totals (fetched only — see note) --');
+  console.log('\n-- Per-source totals, whole period (scheduled + manual) --');
   if (sourceNamesSeen.size) {
     for (const name of [...sourceNamesSeen].sort()) {
-      console.log(`  ${name}: fetched ${formatNumber(perSourceFetched[name])}`);
+      const agg = perSource[name];
+      console.log(`  ${name}: fetched ${formatNumber(agg.fetched)}, scored ${formatNumber(agg.scored)}, kept_after_threshold ${formatNumber(agg.kept_after_threshold)}, sent ${formatNumber(agg.sent)}`);
     }
   } else {
     console.log('  No per-source breakdown available (older log entries predate it).');
   }
-  console.log(
-    '  Note: scheduled runs only log fetched/error per source, not scored or sent — ' +
-      'those are only tracked in aggregate per run (see "Items" above). Per-source ' +
-      'scored/sent would require changing what the workflow logs.'
-  );
   if (entriesMissingSources > 0) {
-    console.log(`  ${entriesMissingSources} run(s) predate per-source logging entirely and aren't included in the per-source totals above.`);
+    console.log(`  ${entriesMissingSources} run(s) predate per-source logging entirely (no sources[] at all) and aren't included above.`);
+  }
+  if (entriesMissingPerSourceCounts > 0) {
+    console.log(`  ${entriesMissingPerSourceCounts} run(s) have fetched/error per source but predate scored/kept_after_threshold/sent — those contribute only their fetched counts above.`);
   }
 }
 
